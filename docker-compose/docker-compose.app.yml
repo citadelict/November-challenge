@@ -1,0 +1,51 @@
+version: "3.8"
+services:
+  backend:
+    build:
+      context: ../backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PROJECT_NAME=YourProjectName
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
+      - POSTGRES_DB=mydatabase
+      - FIRST_SUPERUSER=admin@citatech.online
+      - FIRST_SUPERUSER_PASSWORD=newpassword
+      - BACKEND_CORS_ORIGINS=["http://172.31.0.4:5173"]
+      - ENV_FILE_PATH=/app/.env
+    volumes:
+      - ../backend:/app
+    depends_on:
+      - postgres
+    command: /bin/bash -c "./prestart.sh && poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000" 
+
+  postgres:
+    image: postgres:14
+    environment:
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
+      - POSTGRES_DB=mydatabase
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    user: root 
+    ports:
+      - "5432:5432"
+
+  frontend:
+    build:
+      context: ../frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000 # Update with the backend service URL
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    command: sh -c "chown -R node:node /app && npm run dev -- --host 0.0.0.0"
+
+volumes:
+  postgres_data:
