@@ -1,5 +1,44 @@
 version: "3.8"
 services:
+  traefik:
+    image: "traefik:v2.5"
+    container_name: "traefik"
+    command:
+      - "--log.level=DEBUG"
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencryptresolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencryptresolver.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencryptresolver.acme.email=citatech@proton.me"
+      - "--certificatesresolvers.letsencryptresolver.acme.storage=/etc/traefik/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - app_network
+      - monitoring
+    volumes:
+      - ./traefik/acme.json:/etc/traefik/acme.json
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - "traefik.enable=true"
+      # Dashboard
+      - "traefik.http.routers.dashboard.rule=Host(`demo-domain.online`) && (PathPrefix(`/api/dashboard`) || PathPrefix(`/dashboard`))"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencryptresolver"
+      - "traefik.http.routers.dashboard.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$0s0j0dWJ$$Q1Z9Ul9tqExfjFSf5RgMR0"
+      # ACME challenge
+      - "traefik.http.routers.acme.rule=PathPrefix(`/.well-known/acme-challenge/`)"
+      - "traefik.http.routers.acme.entrypoints=web"
+      - "traefik.http.routers.acme.service=api@internal"
+      - "traefik.http.routers.acme.tls=false"
+
+
   backend:
     build:
       context: ../backend
@@ -13,13 +52,53 @@ services:
       - POSTGRES_DB=mydatabase
       - FIRST_SUPERUSER=admin@citatech.online
       - FIRST_SUPERUSER_PASSWORD=newpassword
-      - BACKEND_CORS_ORIGINS=["http://172.31.0.4:5173"]
+      - BACKEND_CORS_ORIGINS=["http://localhost:5173/", "http://54.215.67.106:5173/", "http://demo-domain.online", "https://demo-domain.online"]
       - ENV_FILE_PATH=/app/.env
     volumes:
       - ../backend:/app
     depends_on:
       - postgres
-    command: /bin/bash -c "./prestart.sh && poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000" 
+    command: /bin/bash -c "./prestart.sh && poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    networks:
+      - app_network
+      - monitoring
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`demo-domain.online`) && PathPrefix(`/api`)"
+      - "traefik.http.services.backend.loadbalancer.server.port=8000"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=letsencryptresolver"
+      - "traefik.http.middlewares.backend-strip.stripprefix.prefixes=/api"
+      - "traefik.http.routers.backend.middlewares=backend-strip"
+      # Route for /api/docs
+      - "traefik.http.routers.backend-docs.rule=Host(`demo-domain.online`) && Path(`/docs`)"
+      - "traefik.http.routers.backend-docs.service=backend"
+      - "traefik.http.routers.backend-docs.entrypoints=websecure"
+      - "traefik.http.routers.backend-docs.tls.certresolver=letsencryptresolver"
+
+  frontend:
+    build:
+      context: ../frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_BACKEND_URL=https://demo-domain.online/api  # Changed to https
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    command: sh -c "chown -R node:node /app && npm run dev -- --host 0.0.0.0"
+    networks:
+      - app_network
+      - monitoring
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`demo-domain.online`)"
+      - "traefik.http.services.frontend.loadbalancer.server.port=5173"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencryptresolver"
+      - "traefik.http.routers.frontend.priority=1" 
 
   postgres:
     image: postgres:14
@@ -29,23 +108,34 @@ services:
       - POSTGRES_DB=mydatabase
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    user: root 
     ports:
       - "5432:5432"
+    networks:
+      - app_network
+      - monitoring
+    labels:
+      - "traefik.enable=false"
 
-  frontend:
-    build:
-      context: ../frontend
+  adminer:
+    image: adminer:4.8.1
+    container_name: "adminer"
     ports:
-      - "5173:5173"
-    environment:
-      - VITE_API_URL=http://localhost:8000 # Update with the backend service URL
-    volumes:
-      - ../frontend:/app
-      - /app/node_modules
-    depends_on:
-      - backend
-    command: sh -c "chown -R node:node /app && npm run dev -- --host 0.0.0.0"
+      - "8081:8080"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.adminer.rule=Host(`demo-domain.online`) && PathPrefix(`/adminer`)"
+      - "traefik.http.routers.adminer.entrypoints=websecure"
+      - "traefik.http.routers.adminer.tls.certresolver=letsencryptresolver"
+      - "traefik.http.services.adminer.loadbalancer.server.port=8080"  # Added this
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
+  monitoring:
+    external: false  # Added this
 
 volumes:
   postgres_data:
+    driver: local

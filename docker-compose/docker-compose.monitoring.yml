@@ -1,0 +1,129 @@
+version: '3.7'
+services:
+  prometheus:
+    image: prom/prometheus:v2.34.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    expose:
+      - "9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--web.external-url=/prometheus'
+    volumes:
+      - ../monitoring/prometheus-config.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - monitoring
+      - app_network
+    labels:
+      - traefik.enable=true
+      # HTTP Service
+      - traefik.http.services.prometheus.loadbalancer.server.port=9090
+      # HTTP Router ()
+      - traefik.http.routers.prometheus-http.rule=(Host(`demo-domain.online`) && PathPrefix(`/prometheus`))
+      - traefik.http.routers.prometheus-http.entrypoints=web
+      # HTTP to HTTPS redirect
+      - traefik.http.routers.prometheus-http.middlewares=https-redirect
+      - traefik.http.middlewares.https-redirect.redirectScheme.scheme=https
+      - traefik.http.middlewares.https-redirect.redirectScheme.permanent=true
+      # HTTPS Router
+      - traefik.http.routers.prometheus.rule=(Host(`demo-domain.online`) && PathPrefix(`/prometheus`))
+      - traefik.http.routers.prometheus.entrypoints=websecure
+      - traefik.http.routers.prometheus.tls.certresolver=letsencryptresolver
+      - traefik.http.routers.prometheus.service=prometheus
+    
+      
+  grafana:
+    image: grafana/grafana:8.3.0
+    container_name: grafana
+    expose:
+      - "3000"
+    ports:
+      - "3000:3000"
+
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SERVER_ROOT_URL=https://demo-domain.online/grafana
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+    networks:
+      - monitoring
+      - app_network
+    labels:
+      - traefik.enable=true
+      # HTTP Service
+      - traefik.http.services.grafana.loadbalancer.server.port=3000
+      # HTTP Router 
+      - traefik.http.routers.grafana-http.rule=(Host(`demo-domain.online`) && PathPrefix(`/grafana`))
+      - traefik.http.routers.grafana-http.entrypoints=web
+      - traefik.http.routers.grafana-http.service=grafana
+      # HTTP to HTTPS redirect
+      - traefik.http.routers.grafana-http.middlewares=https-redirect
+      - traefik.http.middlewares.https-redirect.redirectScheme.scheme=https
+      - traefik.http.middlewares.https-redirect.redirectScheme.permanent=true
+      # HTTPS Router
+      - traefik.http.routers.grafana-https.rule=(Host(`demo-domain.online`) && PathPrefix(`/grafana`))
+      - traefik.http.routers.grafana-https.entrypoints=websecure
+      - traefik.http.routers.grafana-https.tls.certresolver=letsencryptresolver
+      - traefik.http.routers.grafana-https.service=grafana
+    
+    depends_on:
+      - loki
+
+  loki:
+    image: grafana/loki:2.3.0
+    container_name: loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - /var/log:/var/log
+      - ../monitoring/loki-config.yml:/etc/loki/loki-config.yaml
+    networks:
+      - app_network
+      - monitoring
+    labels:  # Added Traefik labels for Loki
+      - "traefik.enable=true"
+      - "traefik.http.services.loki.loadbalancer.server.port=3100"
+      - "traefik.http.routers.loki.rule=Host(`demo-domain.online`) && PathPrefix(`/loki`)"
+      - "traefik.http.middlewares.loki-strip.stripprefix.prefixes=/loki"
+      - "traefik.http.routers.loki.middlewares=loki-strip"
+      - "traefik.http.routers.loki.entrypoints=websecure"
+      - "traefik.http.routers.loki.tls.certresolver=letsencryptresolver"
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    volumes:
+      - /var/log:/var/log  # Added volume for logs
+      - ./promtail-config.yml:/etc/promtail/promtail-config.yaml
+    networks:
+      - app_network
+      - monitoring
+    depends_on:
+      - loki
+
+  cadvisor:
+    image: google/cadvisor:latest  # Changed from canary to latest for stability
+    container_name: cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - app_network
+      - monitoring
+    labels:  # Added Traefik labels for cAdvisor
+      - "traefik.enable=true"
+      - "traefik.http.services.cadvisor.loadbalancer.server.port=8080"
+      - "traefik.http.routers.cadvisor.rule=Host(`demo-domain.online`) && PathPrefix(`/cadvisor`)"
+      - "traefik.http.middlewares.cadvisor-strip.stripprefix.prefixes=/cadvisor"
+      - "traefik.http.routers.cadvisor.middlewares=cadvisor-strip"
+      - "traefik.http.routers.cadvisor.entrypoints=websecure"
+      - "traefik.http.routers.cadvisor.tls.certresolver=letsencryptresolver"
+
+networks:
+  app_network:
+    external: true
+  monitoring:
+    driver: bridge
