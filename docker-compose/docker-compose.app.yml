@@ -70,11 +70,13 @@ services:
       - "traefik.http.routers.backend.tls.certresolver=letsencryptresolver"
       - "traefik.http.middlewares.backend-strip.stripprefix.prefixes=/api"
       - "traefik.http.routers.backend.middlewares=backend-strip"
-      # Route for /api/docs
-      - "traefik.http.routers.backend-docs.rule=Host(`demo-domain.online`) && Path(`/docs`)"
-      - "traefik.http.routers.backend-docs.service=backend"
-      - "traefik.http.routers.backend-docs.entrypoints=websecure"
-      - "traefik.http.routers.backend-docs.tls.certresolver=letsencryptresolver"
+     # Add support for Swagger docs at /docs
+      - "traefik.http.routers.docs.rule=Host(`demo-domain.online`) && Path(`/docs`)"
+      - "traefik.http.services.docs.loadbalancer.server.port=8000"
+      - "traefik.http.routers.docs.entrypoints=websecure"
+      - "traefik.http.routers.docs.tls.certresolver=letsencryptresolver"
+      - "traefik.http.middlewares.docs-strip.stripprefix.prefixes=/api"
+      - "traefik.http.routers.docs.middlewares=docs-strip"
 
   frontend:
     build:
@@ -123,7 +125,7 @@ services:
       - "8081:8080"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.adminer.rule=Host(`demo-domain.online`) && PathPrefix(`/adminer`)"
+      - "traefik.http.routers.adminer.rule=Host(`demo-domain.online`) && PathPrefix(`/db`)"
       - "traefik.http.routers.adminer.entrypoints=websecure"
       - "traefik.http.routers.adminer.tls.certresolver=letsencryptresolver"
       - "traefik.http.services.adminer.loadbalancer.server.port=8080"  # Added this
