@@ -20,14 +20,13 @@ RUN curl -sSL https://install.python-poetry.org | python3 - && \
     ln -s /root/.local/bin/poetry /usr/local/bin/poetry && \
     poetry config virtualenvs.create false
 
-# Install project dependencies
-RUN poetry install --no-root --no-interaction
+
 
 # Copy the rest of the application code
 COPY . .
 
-# Install the project itself in development mode
-RUN poetry install --no-interaction
+# Regenerate the lock file and install dependencies
+RUN poetry lock && poetry install --no-root --no-interaction
 
 # Add the application directory to PYTHONPATH
 ENV PYTHONPATH=/app:$PYTHONPATH
