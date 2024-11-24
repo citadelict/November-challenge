@@ -556,7 +556,7 @@ docker ps
 
 ![prometheus](./images/prom2.png)
 
-![prometheus]()
+![prometheus](./images/prom3.png)
 
 
 ![Adminer]
@@ -565,7 +565,7 @@ docker ps
 ![adminer](./images/adminer.png)
 
 
-[Continue with the rest of the screenshots as in previous version...]
+
 
 ## Notes for Implementation:
 
