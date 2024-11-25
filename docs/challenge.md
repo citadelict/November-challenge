@@ -510,25 +510,29 @@ docker ps
 
 ### frontend on  `/`
 
-![frontend](./images/front.png)
+![frontend](./images/frontend.png)
 
 ### Backend on `/api`
 
-![backend]()
+![backend](./images/logged.png)
 
 ### Prometheus on `/prometheus`
 
-![prometheus](./images/prom3.png)
+![prometheus](./images/pro.png)
 
-![prometheus](./images/prom2.png)
+
 
 ### Grafana on `/grafana`
 
-![grafana](./images/grafana5.png)
+![grafana](./images/gdash.png)
 
 ### Swagger Docs on `/docs`
 
-![docs]()
+![docs](./images/docs.png)
+
+### Database  on `/db`
+
+![docs](./images/database.png)
 
 
 ### Application Deployment
